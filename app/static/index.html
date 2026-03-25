@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Toyoko Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260326b" />
   </head>
   <body>
     <div class="page-shell">
@@ -16,9 +16,19 @@
             先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，每小时自动刷新。
           </p>
         </div>
-        <div class="hero-status">
-          <span class="status-dot"></span>
-          <span id="app-status">初始化中</span>
+        <div class="hero-actions">
+          <a class="hero-shortcut hero-shortcut-accent" href="/logs">
+            <span class="hero-shortcut-kicker">Quick Access</span>
+            <span class="hero-shortcut-title">查看运行日志</span>
+            <span class="hero-shortcut-meta">应用日志 / 推送内容 / 推送结果</span>
+          </a>
+          <div class="hero-status-panel">
+            <span class="hero-shortcut-kicker">Service Status</span>
+            <div class="hero-status">
+              <span class="status-dot"></span>
+              <span id="app-status">初始化中</span>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -138,6 +148,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=20260326b" defer></script>
   </body>
 </html>

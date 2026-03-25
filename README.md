@@ -123,6 +123,20 @@ D:\github\toyoko_monitor\logs\nssm-service.stdout.log
 D:\github\toyoko_monitor\logs\nssm-service.stderr.log
 ```
 
+## Server酱 通知
+
+当前仓库已支持在监控刷新后自动发送 Server酱 微信通知。
+
+- 配置文件路径：`data/serverchan.json`
+- 发送方式：`POST`
+- 编码方式：`application/json`
+- 当前默认通道：`9`（方糖服务号）
+
+行为说明：
+
+- 每次监控刷新结束后，如果本次刷新里有任意监控项出现空房，会汇总成一条通知发送。
+- 通知内容会包含本次刷新的全部可订结果，包括酒店名、地址、房型、状态、可订房数、价格、入住退房日期和查询时间。
+
 ## 说明
 
 - 监控间隔当前固定为 60 分钟。

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toyoko Monitor Logs</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260326b" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Toyoko Monitor Logs</p>
+          <h1>运行与推送日志</h1>
+          <p class="hero-text">
+            这里分别显示应用日志、推送内容日志和推送结果日志。每个文本框默认展示最后 100 行，并自动刷新。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="hero-shortcut hero-shortcut-neutral" href="/">
+            <span class="hero-shortcut-kicker">Quick Access</span>
+            <span class="hero-shortcut-title">返回监控主页</span>
+            <span class="hero-shortcut-meta">酒店查询 / 房型监控 / 手动刷新</span>
+          </a>
+          <button id="refresh-logs-button" class="hero-shortcut hero-shortcut-warm" type="button">
+            <span class="hero-shortcut-kicker">Refresh</span>
+            <span class="hero-shortcut-title">立即刷新日志</span>
+            <span class="hero-shortcut-meta">重新读取最后 100 行</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel log-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Logs</p>
+              <h2>日志查看器</h2>
+            </div>
+            <div class="log-meta">
+              <span id="logs-status" class="muted">初始化中</span>
+            </div>
+          </div>
+
+          <div id="log-grid" class="log-grid">
+            <article class="log-card">
+              <div class="log-card-head">
+                <h3>日志</h3>
+                <span class="muted">最后 100 行</span>
+              </div>
+              <textarea class="log-box" readonly>加载中...</textarea>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/logs.js?v=20260326b" defer></script>
+  </body>
+</html>

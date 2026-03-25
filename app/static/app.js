@@ -146,8 +146,8 @@ function renderCatalog() {
   elements.catalogCount.textContent = `${state.catalog.length} 家`;
   elements.catalogSummary.textContent =
     state.selectedHotelCodes.size > 0
-      ? `已选择 ${state.selectedHotelCodes.size} 家酒店。`
-      : "当前未选择酒店。";
+      ? `当前勾选 ${state.selectedHotelCodes.size} 家。`
+      : "点击酒店卡片即可勾选。";
 
   if (state.catalog.length === 0) {
     elements.catalogList.innerHTML = '<div class="empty-row">暂无酒店目录</div>';
@@ -163,12 +163,11 @@ function renderCatalog() {
           class="catalog-item ${selected ? "is-selected" : ""}"
           data-hotel-code="${escapeHtml(hotel.hotel_code)}"
         >
-          <span class="catalog-check">${selected ? "已选" : "选择"}</span>
           <div class="catalog-name">${escapeHtml(hotel.name)}</div>
-          <div class="catalog-meta">
+          <div class="catalog-meta catalog-meta-primary">
             ${escapeHtml(hotel.subarea_label)} · ${escapeHtml(hotel.city || "都市名なし")}
           </div>
-          <div class="catalog-meta">${escapeHtml(hotel.address || "住所未提供")}</div>
+          <div class="catalog-meta catalog-meta-secondary">${escapeHtml(hotel.address || "住所未提供")}</div>
         </button>
       `;
     })

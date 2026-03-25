@@ -124,3 +124,15 @@ class MonitorTarget(BaseModel):
 
 class RefreshResponse(BaseModel):
     refreshed_count: int
+
+
+class LogSection(BaseModel):
+    key: str
+    label: str
+    file_name: str
+    content: str
+
+
+class LogsResponse(BaseModel):
+    line_count: int
+    sections: list[LogSection]
