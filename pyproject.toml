@@ -1,0 +1,16 @@
+[project]
+name = "toyoko-monitor"
+version = "0.1.0"
+description = "Local Toyoko Inn vacancy monitor built with FastAPI."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "pydantic>=2.10,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

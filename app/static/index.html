@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toyoko Monitor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Toyoko Inn Vacancy Monitor</p>
+          <h1>本地空房监控面板</h1>
+          <p class="hero-text">
+            先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，每小时自动刷新。
+          </p>
+        </div>
+        <div class="hero-status">
+          <span class="status-dot"></span>
+          <span id="app-status">初始化中</span>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel search-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Catalog</p>
+              <h2>区域、日期与酒店选择</h2>
+            </div>
+            <button id="search-button" class="btn btn-primary">查询已选酒店</button>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>大区块</span>
+              <select id="area-select"></select>
+            </label>
+            <label class="field">
+              <span>小区块</span>
+              <select id="subarea-select"></select>
+            </label>
+            <label class="field">
+              <span>入住日期</span>
+              <input id="start-date" type="date" />
+            </label>
+            <label class="field">
+              <span>退房日期</span>
+              <input id="end-date" type="date" />
+            </label>
+            <label class="field">
+              <span>人数</span>
+              <input id="people-input" type="number" min="1" max="4" value="1" />
+            </label>
+            <label class="field">
+              <span>房间数</span>
+              <input id="rooms-input" type="number" min="1" max="4" value="1" />
+            </label>
+            <label class="field">
+              <span>吸烟偏好</span>
+              <select id="smoking-select">
+                <option value="-all">不限</option>
+                <option value="noSmoking">禁煙のみ</option>
+                <option value="smoking">喫煙のみ</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="subpanel">
+            <div class="subpanel-head">
+              <div class="subpanel-title">
+                <h3>日文酒店目录</h3>
+                <span id="catalog-count" class="muted">0 家</span>
+              </div>
+              <div class="subpanel-actions">
+                <button id="select-all-hotels-button" class="btn btn-secondary btn-small">全选当前列表</button>
+                <button id="clear-selected-hotels-button" class="btn btn-secondary btn-small">清空选择</button>
+              </div>
+            </div>
+            <p id="catalog-summary" class="muted">当前未选择酒店。</p>
+            <div id="catalog-list" class="catalog-list"></div>
+          </div>
+        </section>
+
+        <section class="panel results-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Results</p>
+              <h2>空房查询结果</h2>
+            </div>
+            <button id="add-monitor-button" class="btn btn-secondary" disabled>加入房型监控</button>
+          </div>
+
+          <div class="toolbar">
+            <p id="search-summary" class="muted">先从目录里选择酒店，再执行查询。</p>
+          </div>
+
+          <div id="results-list" class="results-list">
+            <div class="empty-row">暂无查询结果</div>
+          </div>
+        </section>
+
+        <section class="panel monitor-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Monitor</p>
+              <h2>房型级监控</h2>
+            </div>
+            <button id="refresh-monitor-button" class="btn btn-primary btn-small">立即刷新全部</button>
+          </div>
+
+          <div class="toolbar">
+            <p class="muted">监控项会保存到本地 SQLite，按房型单独刷新。</p>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>酒店 / 房型</th>
+                  <th>日期</th>
+                  <th>状态</th>
+                  <th>空房数</th>
+                  <th>价格</th>
+                  <th>上次刷新</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="monitor-body">
+                <tr>
+                  <td colspan="7" class="empty-row">暂无监控项</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,2 @@
+"""Toyoko monitor application package."""
+
