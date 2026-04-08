@@ -7,8 +7,9 @@ from datetime import date
 from datetime import datetime, timedelta
 
 from .database import MonitorRepository, utc_now
+from .notifications import NotificationService
 from .schemas import MonitorTarget
-from .serverchan import NotificationSnapshot, ServerChanNotifier
+from .serverchan import NotificationSnapshot
 from .toyoko_client import ToyokoClient
 
 
@@ -28,7 +29,6 @@ class RefreshOutcome:
 
 @dataclass(frozen=True, slots=True)
 class RefreshRequestKey:
-    hotel_code: str
     start_date: date
     end_date: date
     people: int
@@ -42,7 +42,7 @@ class MonitorService:
         *,
         repository: MonitorRepository,
         client: ToyokoClient,
-        notifier: ServerChanNotifier | None = None,
+        notifier: NotificationService | None = None,
         refresh_loop_seconds: int = 60,
         max_concurrency: int = 3,
     ) -> None:
@@ -104,28 +104,16 @@ class MonitorService:
             ) -> list[RefreshOutcome]:
                 async with semaphore:
                     try:
-                        availability = await self.client.fetch_hotel_availability(
-                            hotel_code=request_key.hotel_code,
-                            start_date=request_key.start_date,
-                            end_date=request_key.end_date,
-                            people=request_key.people,
-                            rooms=request_key.rooms,
-                            smoking=request_key.smoking,
-                            hotel_name_hint=grouped_targets[0].hotel_name,
+                        return await self._refresh_grouped_targets(
+                            request_key=request_key,
+                            grouped_targets=grouped_targets,
                         )
-                        outcomes = [
-                            self._build_refresh_outcome(target=target, availability=availability)
-                            for target in grouped_targets
-                        ]
-                        for outcome in outcomes:
-                            self._persist_refresh_outcome(outcome)
-                        return outcomes
                     except Exception as exc:
                         for target in grouped_targets:
                             self.repository.update_target_error(target.id, str(exc))
                         logger.exception(
-                            "Unexpected monitor refresh failure for request hotel=%s target_ids=%s",
-                            request_key.hotel_code,
+                            "Unexpected monitor refresh failure for request hotels=%s target_ids=%s",
+                            sorted({target.hotel_code for target in grouped_targets}),
                             [target.id for target in grouped_targets],
                         )
                         return []
@@ -182,7 +170,6 @@ class MonitorService:
         grouped_targets: dict[RefreshRequestKey, list[MonitorTarget]] = {}
         for target in targets:
             request_key = RefreshRequestKey(
-                hotel_code=target.hotel_code,
                 start_date=target.start_date,
                 end_date=target.end_date,
                 people=target.people,
@@ -191,6 +178,129 @@ class MonitorService:
             )
             grouped_targets.setdefault(request_key, []).append(target)
         return grouped_targets
+
+    async def _refresh_grouped_targets(
+        self,
+        *,
+        request_key: RefreshRequestKey,
+        grouped_targets: list[MonitorTarget],
+    ) -> list[RefreshOutcome]:
+        hotel_groups = self._group_targets_by_hotel(grouped_targets)
+        if len(hotel_groups) <= 1:
+            return await self._refresh_hotel_groups(request_key=request_key, hotel_groups=hotel_groups)
+
+        try:
+            price_availability = await self.client.fetch_hotels_price_availability(
+                hotel_codes=sorted(hotel_groups),
+                start_date=request_key.start_date,
+                end_date=request_key.end_date,
+                people=request_key.people,
+                rooms=request_key.rooms,
+                smoking=request_key.smoking,
+            )
+        except Exception:
+            logger.exception(
+                "Batch price prefilter failed; falling back to room_plan fetch: hotels=%s start=%s end=%s people=%s rooms=%s smoking=%s",
+                sorted(hotel_groups),
+                request_key.start_date,
+                request_key.end_date,
+                request_key.people,
+                request_key.rooms,
+                request_key.smoking,
+            )
+            return await self._refresh_hotel_groups(request_key=request_key, hotel_groups=hotel_groups)
+
+        outcomes: list[RefreshOutcome] = []
+        hotels_to_refresh: dict[str, list[MonitorTarget]] = {}
+        for hotel_code, hotel_targets in hotel_groups.items():
+            availability = price_availability.get(hotel_code)
+            if availability is None or (
+                availability.exist_enough_vacant_rooms and not availability.is_under_maintenance
+            ):
+                hotels_to_refresh[hotel_code] = hotel_targets
+                continue
+
+            hotel_outcomes = [
+                self._build_prefilter_unavailable_outcome(target=target, checked_at=availability.checked_at)
+                for target in hotel_targets
+            ]
+            for outcome in hotel_outcomes:
+                self._persist_refresh_outcome(outcome)
+            outcomes.extend(hotel_outcomes)
+
+        logger.info(
+            "Monitor price prefilter applied: hotel_count=%s detail_refresh_count=%s skipped_unavailable_count=%s start=%s end=%s people=%s rooms=%s smoking=%s",
+            len(hotel_groups),
+            len(hotels_to_refresh),
+            len(hotel_groups) - len(hotels_to_refresh),
+            request_key.start_date,
+            request_key.end_date,
+            request_key.people,
+            request_key.rooms,
+            request_key.smoking,
+        )
+        outcomes.extend(
+            await self._refresh_hotel_groups(request_key=request_key, hotel_groups=hotels_to_refresh)
+        )
+        return outcomes
+
+    @staticmethod
+    def _group_targets_by_hotel(targets: list[MonitorTarget]) -> dict[str, list[MonitorTarget]]:
+        hotel_groups: dict[str, list[MonitorTarget]] = {}
+        for target in targets:
+            hotel_groups.setdefault(target.hotel_code, []).append(target)
+        return hotel_groups
+
+    async def _refresh_hotel_groups(
+        self,
+        *,
+        request_key: RefreshRequestKey,
+        hotel_groups: dict[str, list[MonitorTarget]],
+    ) -> list[RefreshOutcome]:
+        if not hotel_groups:
+            return []
+
+        semaphore = asyncio.Semaphore(self.max_concurrency)
+
+        async def worker(hotel_code: str, hotel_targets: list[MonitorTarget]) -> list[RefreshOutcome]:
+            async with semaphore:
+                availability = await self.client.fetch_hotel_availability(
+                    hotel_code=hotel_code,
+                    start_date=request_key.start_date,
+                    end_date=request_key.end_date,
+                    people=request_key.people,
+                    rooms=request_key.rooms,
+                    smoking=request_key.smoking,
+                    hotel_name_hint=hotel_targets[0].hotel_name,
+                )
+                hotel_outcomes = [
+                    self._build_refresh_outcome(target=target, availability=availability)
+                    for target in hotel_targets
+                ]
+                for outcome in hotel_outcomes:
+                    self._persist_refresh_outcome(outcome)
+                return hotel_outcomes
+
+        grouped_outcomes = await asyncio.gather(
+            *(worker(hotel_code, hotel_targets) for hotel_code, hotel_targets in hotel_groups.items())
+        )
+        return [outcome for outcomes in grouped_outcomes for outcome in outcomes]
+
+    @staticmethod
+    def _build_prefilter_unavailable_outcome(
+        *,
+        target: MonitorTarget,
+        checked_at: datetime,
+    ) -> RefreshOutcome:
+        return RefreshOutcome(
+            target=target,
+            checked_at=checked_at,
+            last_status="unavailable",
+            available_room_count=0,
+            general_price=None,
+            member_price=None,
+            error_message=None,
+        )
 
     def _build_refresh_outcome(self, *, target: MonitorTarget, availability) -> RefreshOutcome:
         if availability.error_message:
@@ -294,4 +404,4 @@ class MonitorService:
                 )
             await self.notifier.send_available_targets(snapshots)
         except Exception:
-            logger.exception("Failed to send ServerChan notification")
+            logger.exception("Failed to send push notification")

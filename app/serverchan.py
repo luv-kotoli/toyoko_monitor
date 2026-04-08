@@ -74,15 +74,39 @@ class ServerChanNotifier:
         if not snapshots:
             return {}
 
+        ordered = self._order_snapshots(snapshots)
         payload = {
-            "title": self._build_title(snapshots),
-            "desp": self._build_markdown(snapshots),
-            "short": self._build_short_summary(snapshots),
+            "title": self._build_title(ordered),
+            "desp": self._build_markdown(ordered),
+            "short": self._build_short_summary(ordered),
             "channel": self.config.channel,
         }
         if self.config.noip is not None:
             payload["noip"] = self.config.noip
 
+        return await self._send_payload(payload)
+
+    async def send_test_message(
+        self,
+        *,
+        title: str,
+        subtitle: str | None,
+        body: str,
+    ) -> dict[str, Any]:
+        desp = body.strip()
+        if subtitle:
+            desp = f"## {subtitle}\n\n{desp}"
+        payload = {
+            "title": title,
+            "desp": desp,
+            "short": (subtitle or body).replace("\n", " ")[:64],
+            "channel": self.config.channel,
+        }
+        if self.config.noip is not None:
+            payload["noip"] = self.config.noip
+        return await self._send_payload(payload)
+
+    async def _send_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         push_content_logger.info(
             "ServerChan request payload:\n%s",
             json.dumps(payload, ensure_ascii=False, indent=2),
@@ -117,19 +141,9 @@ class ServerChanNotifier:
             raise RuntimeError(f"ServerChan push-status lookup failed: {data}")
         return data
 
-    def _build_title(self, snapshots: list[NotificationSnapshot]) -> str:
-        latest = max(snapshot.checked_at for snapshot in snapshots).astimezone()
-        return f"{self.config.title_prefix} 空房提醒 {len(snapshots)}项 {latest:%H:%M}"
-
-    def _build_short_summary(self, snapshots: list[NotificationSnapshot]) -> str:
-        names = " / ".join(snapshot.hotel_name for snapshot in snapshots[:2])
-        if len(snapshots) > 2:
-            names = f"{names} 等{len(snapshots)}项"
-        checked_at = max(snapshot.checked_at for snapshot in snapshots).astimezone()
-        return f"{checked_at:%m-%d %H:%M} 有空房: {names}"[:64]
-
-    def _build_markdown(self, snapshots: list[NotificationSnapshot]) -> str:
-        ordered = sorted(
+    @staticmethod
+    def _order_snapshots(snapshots: list[NotificationSnapshot]) -> list[NotificationSnapshot]:
+        return sorted(
             snapshots,
             key=lambda item: (
                 item.area_label,
@@ -139,16 +153,29 @@ class ServerChanNotifier:
                 item.room_type_smoking,
             ),
         )
-        latest = max(snapshot.checked_at for snapshot in ordered).astimezone()
+
+    @staticmethod
+    def _build_title(snapshots: list[NotificationSnapshot]) -> str:
+        return snapshots[0].hotel_name[:120]
+
+    def _build_short_summary(self, snapshots: list[NotificationSnapshot]) -> str:
+        names = " / ".join(snapshot.hotel_name for snapshot in snapshots[:2])
+        if len(snapshots) > 2:
+            names = f"{names} 等{len(snapshots)}项"
+        checked_at = max(snapshot.checked_at for snapshot in snapshots).astimezone()
+        return f"{checked_at:%m-%d %H:%M} 有空房: {names}"[:64]
+
+    def _build_markdown(self, snapshots: list[NotificationSnapshot]) -> str:
+        latest = max(snapshot.checked_at for snapshot in snapshots).astimezone()
         lines = [
-            f"## 本次刷新发现 {len(ordered)} 个可订监控项",
+            f"## 本次刷新发现 {len(snapshots)} 个可订监控项",
             "",
             f"- 刷新时间：{latest:%Y-%m-%d %H:%M:%S %Z}",
             f"- 推送通道：{self.config.channel}",
             "",
         ]
 
-        for index, snapshot in enumerate(ordered, start=1):
+        for index, snapshot in enumerate(snapshots, start=1):
             lines.extend(
                 [
                     f"### {index}. {snapshot.hotel_name}",

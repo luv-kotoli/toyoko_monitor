@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Toyoko Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260326b" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260328a" />
   </head>
   <body>
     <div class="page-shell">
@@ -13,15 +13,20 @@
           <p class="eyebrow">Toyoko Inn Vacancy Monitor</p>
           <h1>本地空房监控面板</h1>
           <p class="hero-text">
-            先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，每小时自动刷新。
+            先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，每 15 分钟自动刷新。
           </p>
         </div>
         <div class="hero-actions">
-          <a class="hero-shortcut hero-shortcut-accent" href="/logs">
-            <span class="hero-shortcut-kicker">Quick Access</span>
-            <span class="hero-shortcut-title">查看运行日志</span>
-            <span class="hero-shortcut-meta">应用日志 / 推送内容 / 推送结果</span>
-          </a>
+          <div class="hero-shortcut-row">
+            <a class="hero-shortcut hero-shortcut-accent hero-shortcut-compact" href="/logs">
+              <span class="hero-shortcut-title">运行日志</span>
+              <span class="hero-shortcut-meta">查看日志</span>
+            </a>
+            <a class="hero-shortcut hero-shortcut-neutral hero-shortcut-compact" href="/settings">
+              <span class="hero-shortcut-title">推送配置</span>
+              <span class="hero-shortcut-meta">Bark / Server酱</span>
+            </a>
+          </div>
           <div class="hero-status-panel">
             <span class="hero-shortcut-kicker">Service Status</span>
             <div class="hero-status">
@@ -121,25 +126,23 @@
           </div>
 
           <div class="toolbar">
-            <p class="muted">监控项会保存到本地 SQLite，按房型单独刷新。</p>
+            <p class="muted">监控项会保存到本地 SQLite，按组折叠展示；点击组行即可展开或收起。</p>
           </div>
 
           <div class="table-wrap">
-            <table>
+            <table class="monitor-group-table">
               <thead>
                 <tr>
-                  <th>酒店 / 房型</th>
-                  <th>日期</th>
-                  <th>状态</th>
-                  <th>空房数</th>
-                  <th>价格</th>
+                  <th>分组</th>
+                  <th>监控项数</th>
+                  <th>总空房数</th>
                   <th>上次刷新</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody id="monitor-body">
                 <tr>
-                  <td colspan="7" class="empty-row">暂无监控项</td>
+                  <td colspan="5" class="empty-row">暂无监控项</td>
                 </tr>
               </tbody>
             </table>
@@ -148,6 +151,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260326b" defer></script>
+    <script src="/static/app.js?v=20260328a" defer></script>
   </body>
 </html>

@@ -8,9 +8,16 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .database import MonitorRepository
+from .database import DEFAULT_CHECK_INTERVAL_MINUTES, MonitorRepository
 from .log_utils import configure_logging, read_log_sections
 from .monitor_service import MonitorService
+from .notifications import (
+    NotificationService,
+    NotificationSettings,
+    NotificationSettingsResponse,
+    NotificationTestRequest,
+    NotificationTestResponse,
+)
 from .schemas import (
     AreaOption,
     CreateMonitorTargetsRequest,
@@ -18,10 +25,11 @@ from .schemas import (
     HotelSearchResult,
     HotelSummary,
     LogsResponse,
+    MonitorGroupEnabledUpdateRequest,
+    MonitorGroupUpdateRequest,
     MonitorTarget,
     RefreshResponse,
 )
-from .serverchan import load_serverchan_notifier
 from .toyoko_client import ToyokoClient
 
 
@@ -30,14 +38,19 @@ STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR.parent / "data"
 DB_PATH = DATA_DIR / "toyoko_monitor.db"
 LOG_DIR = BASE_DIR.parent / "logs"
+NOTIFICATION_CONFIG_PATH = DATA_DIR / "notification.json"
+LEGACY_SERVERCHAN_CONFIG_PATH = DATA_DIR / "serverchan.json"
 
 configure_logging(LOG_DIR)
 logger = logging.getLogger(__name__)
 
 repository = MonitorRepository(DB_PATH)
 client = ToyokoClient()
-notifier = load_serverchan_notifier(DATA_DIR / "serverchan.json")
-monitor_service = MonitorService(repository=repository, client=client, notifier=notifier)
+notification_service = NotificationService(
+    config_path=NOTIFICATION_CONFIG_PATH,
+    legacy_serverchan_path=LEGACY_SERVERCHAN_CONFIG_PATH,
+)
+monitor_service = MonitorService(repository=repository, client=client, notifier=notification_service)
 
 
 @asynccontextmanager
@@ -48,8 +61,6 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         await monitor_service.stop()
-        if notifier is not None:
-            await notifier.close()
         await client.close()
 
 
@@ -65,6 +76,11 @@ async def index() -> FileResponse:
 @app.get("/logs", response_class=FileResponse)
 async def logs_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "logs.html")
+
+
+@app.get("/settings", response_class=FileResponse)
+async def settings_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "settings.html")
 
 
 @app.get("/health")
@@ -122,6 +138,21 @@ async def get_logs(line_count: int = Query(default=100, ge=1, le=500)) -> LogsRe
     return LogsResponse(line_count=line_count, sections=sections)
 
 
+@app.get("/api/settings/notifications", response_model=NotificationSettingsResponse)
+async def get_notification_settings() -> NotificationSettingsResponse:
+    return notification_service.get_settings_response()
+
+
+@app.put("/api/settings/notifications", response_model=NotificationSettingsResponse)
+async def save_notification_settings(config: NotificationSettings) -> NotificationSettingsResponse:
+    return notification_service.save_settings(config)
+
+
+@app.post("/api/settings/notifications/test", response_model=NotificationTestResponse)
+async def test_notification_settings(request: NotificationTestRequest) -> NotificationTestResponse:
+    return await notification_service.send_test_notification(request)
+
+
 @app.get("/api/monitor-targets", response_model=list[MonitorTarget])
 async def list_monitor_targets() -> list[MonitorTarget]:
     return repository.list_targets()
@@ -135,8 +166,14 @@ async def create_monitor_targets(request: CreateMonitorTargetsRequest) -> list[M
     if not hotels:
         raise HTTPException(status_code=404, detail="未找到要加入监控的酒店。")
 
+    group_name = request.group_name.strip()
+    if not group_name:
+        raise HTTPException(status_code=400, detail="组名不能为空。")
+    group_id = repository.create_group(group_name)
+
     repository.upsert_targets(
         {
+            "group_id": group_id,
             "hotel_code": target.hotel_code,
             "hotel_name": hotel_map[target.hotel_code].name,
             "area_key": hotel_map[target.hotel_code].area_key,
@@ -151,12 +188,12 @@ async def create_monitor_targets(request: CreateMonitorTargetsRequest) -> list[M
             "people": request.people,
             "rooms": request.rooms,
             "smoking": request.smoking,
-            "check_interval_minutes": 60,
+            "check_interval_minutes": DEFAULT_CHECK_INTERVAL_MINUTES,
         }
         for target in request.targets
         if target.hotel_code in hotel_map
     )
-    logger.info("Monitor targets upserted: count=%s", len(request.targets))
+    logger.info("Monitor targets upserted: count=%s group_id=%s group_name=%s", len(request.targets), group_id, group_name)
 
     refreshed_target_ids = [
         target.id
@@ -174,6 +211,51 @@ async def create_monitor_targets(request: CreateMonitorTargetsRequest) -> list[M
     ]
     await monitor_service.refresh_due_targets(force=True, target_ids=refreshed_target_ids)
     return repository.list_targets()
+
+
+@app.patch("/api/monitor-groups/{group_id}")
+async def rename_monitor_group(group_id: int, request: MonitorGroupUpdateRequest) -> dict[str, object]:
+    name = request.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="组名不能为空。")
+    updated = repository.rename_group(group_id, name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="未找到对应监控组。")
+    logger.info("Monitor group renamed: group_id=%s name=%s", group_id, name)
+    return {"id": group_id, "name": name}
+
+
+@app.patch("/api/monitor-groups/{group_id}/enabled")
+async def update_monitor_group_enabled(
+    group_id: int,
+    request: MonitorGroupEnabledUpdateRequest,
+) -> dict[str, object]:
+    updated = repository.set_group_enabled(group_id, request.enabled)
+    if not updated:
+        raise HTTPException(status_code=404, detail="未找到对应监控组。")
+    logger.info("Monitor group enabled updated: group_id=%s enabled=%s", group_id, request.enabled)
+    return {"id": group_id, "enabled": request.enabled}
+
+
+@app.post("/api/monitor-groups/{group_id}/refresh", response_model=RefreshResponse)
+async def refresh_monitor_group(group_id: int) -> RefreshResponse:
+    targets = repository.get_targets_by_group_id(group_id)
+    if not targets:
+        raise HTTPException(status_code=404, detail="未找到对应监控组。")
+    target_ids = [target.id for target in targets]
+    logger.info("Monitor group refresh requested: group_id=%s target_count=%s", group_id, len(target_ids))
+    refreshed_count = await monitor_service.refresh_due_targets(force=True, target_ids=target_ids)
+    logger.info("Monitor group refresh finished: group_id=%s refreshed_count=%s", group_id, refreshed_count)
+    return RefreshResponse(refreshed_count=refreshed_count)
+
+
+@app.delete("/api/monitor-groups/{group_id}", status_code=204)
+async def delete_monitor_group(group_id: int) -> Response:
+    deleted = repository.delete_group(group_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="未找到对应监控组。")
+    logger.info("Monitor group deleted: group_id=%s", group_id)
+    return Response(status_code=204)
 
 
 @app.delete("/api/monitor-targets/{target_id}", status_code=204)

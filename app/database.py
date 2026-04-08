@@ -5,7 +5,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from .schemas import MonitorTarget, RoomAvailability
+from .schemas import MonitorTarget
+
+
+LEGACY_DEFAULT_GROUP_NAME = "5.23-5.25大阪"
+DEFAULT_CHECK_INTERVAL_MINUTES = 15
 
 
 def utc_now() -> datetime:
@@ -23,14 +27,23 @@ class MonitorRepository:
                 self._migrate_schema(connection)
             else:
                 self._create_schema(connection)
+            self._enforce_check_interval(connection)
 
     def list_targets(self) -> list[MonitorTarget]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT *
+                SELECT
+                    monitor_targets.*,
+                    monitor_groups.name AS group_name
                 FROM monitor_targets
-                ORDER BY hotel_name ASC, room_type_name ASC, start_date ASC, end_date ASC
+                JOIN monitor_groups ON monitor_groups.id = monitor_targets.group_id
+                ORDER BY
+                    monitor_groups.id DESC,
+                    hotel_name ASC,
+                    room_type_name ASC,
+                    start_date ASC,
+                    end_date ASC
                 """
             ).fetchall()
         return [self._row_to_target(row) for row in rows]
@@ -43,14 +56,89 @@ class MonitorRepository:
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
-                SELECT *
+                SELECT
+                    monitor_targets.*,
+                    monitor_groups.name AS group_name
                 FROM monitor_targets
-                WHERE id IN ({placeholders})
-                ORDER BY hotel_name ASC, room_type_name ASC
+                JOIN monitor_groups ON monitor_groups.id = monitor_targets.group_id
+                WHERE monitor_targets.id IN ({placeholders})
+                ORDER BY monitor_groups.id DESC, hotel_name ASC, room_type_name ASC
                 """,
                 list(target_ids),
             ).fetchall()
         return [self._row_to_target(row) for row in rows]
+
+    def get_targets_by_group_id(self, group_id: int) -> list[MonitorTarget]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    monitor_targets.*,
+                    monitor_groups.name AS group_name
+                FROM monitor_targets
+                JOIN monitor_groups ON monitor_groups.id = monitor_targets.group_id
+                WHERE monitor_targets.group_id = ?
+                ORDER BY hotel_name ASC, room_type_name ASC
+                """,
+                (group_id,),
+            ).fetchall()
+        return [self._row_to_target(row) for row in rows]
+
+    def create_group(self, name: str) -> int:
+        with self._connect() as connection:
+            return self._create_group_row(connection, name=name)
+
+    def rename_group(self, group_id: int, name: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE monitor_groups
+                SET
+                    name = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (name, utc_now().isoformat(), group_id),
+            )
+            return cursor.rowcount > 0
+
+    def set_group_enabled(self, group_id: int, enabled: bool) -> bool:
+        now = utc_now().isoformat()
+        with self._connect() as connection:
+            group_exists = connection.execute(
+                "SELECT 1 FROM monitor_groups WHERE id = ?",
+                (group_id,),
+            ).fetchone()
+            if not group_exists:
+                return False
+            connection.execute(
+                """
+                UPDATE monitor_targets
+                SET
+                    enabled = ?,
+                    updated_at = ?
+                WHERE group_id = ?
+                """,
+                (1 if enabled else 0, now, group_id),
+            )
+            connection.execute(
+                """
+                UPDATE monitor_groups
+                SET
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, group_id),
+            )
+            return True
+
+    def delete_group(self, group_id: int) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM monitor_groups WHERE id = ?",
+                (group_id,),
+            )
+            return cursor.rowcount > 0
 
     def upsert_targets(self, targets: Iterable[dict[str, object]]) -> None:
         now = utc_now().isoformat()
@@ -59,6 +147,7 @@ class MonitorRepository:
                 connection.execute(
                     """
                     INSERT INTO monitor_targets (
+                        group_id,
                         hotel_code,
                         hotel_name,
                         area_key,
@@ -77,9 +166,10 @@ class MonitorRepository:
                         enabled,
                         created_at,
                         updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                     ON CONFLICT(hotel_code, room_type_id, start_date, end_date, people, rooms, smoking)
                     DO UPDATE SET
+                        group_id = excluded.group_id,
                         hotel_name = excluded.hotel_name,
                         area_key = excluded.area_key,
                         area_label = excluded.area_label,
@@ -92,6 +182,7 @@ class MonitorRepository:
                         updated_at = excluded.updated_at
                     """,
                     (
+                        target["group_id"],
                         target["hotel_code"],
                         target["hotel_name"],
                         target["area_key"],
@@ -106,7 +197,7 @@ class MonitorRepository:
                         target["people"],
                         target["rooms"],
                         target["smoking"],
-                        target.get("check_interval_minutes", 60),
+                        target.get("check_interval_minutes", DEFAULT_CHECK_INTERVAL_MINUTES),
                         now,
                         now,
                     ),
@@ -114,11 +205,20 @@ class MonitorRepository:
 
     def delete_target(self, target_id: int) -> bool:
         with self._connect() as connection:
+            row = connection.execute(
+                "SELECT group_id FROM monitor_targets WHERE id = ?",
+                (target_id,),
+            ).fetchone()
+            if not row:
+                return False
             cursor = connection.execute(
                 "DELETE FROM monitor_targets WHERE id = ?",
                 (target_id,),
             )
-            return cursor.rowcount > 0
+            if cursor.rowcount > 0:
+                self._delete_group_if_empty(connection, row["group_id"])
+                return True
+            return False
 
     def update_target_result(
         self,
@@ -180,9 +280,20 @@ class MonitorRepository:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     def _needs_migration(self, connection: sqlite3.Connection) -> bool:
+        legacy_table_exists = connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'monitor_targets_legacy'
+            """
+        ).fetchone()
+        if legacy_table_exists:
+            return True
+
         table_exists = connection.execute(
             """
             SELECT 1
@@ -198,6 +309,7 @@ class MonitorRepository:
             for row in connection.execute("PRAGMA table_info(monitor_targets)").fetchall()
         }
         required_columns = {
+            "group_id",
             "subarea_key",
             "subarea_label",
             "room_type_id",
@@ -206,15 +318,48 @@ class MonitorRepository:
             "general_price",
             "member_price",
         }
-        return not required_columns.issubset(columns)
+        group_table_exists = connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'monitor_groups'
+            """
+        ).fetchone()
+        return not required_columns.issubset(columns) or not group_table_exists
 
     def _migrate_schema(self, connection: sqlite3.Connection) -> None:
-        connection.execute("ALTER TABLE monitor_targets RENAME TO monitor_targets_legacy")
-        self._create_schema(connection)
-        connection.execute(
+        legacy_table_exists = connection.execute(
             """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'monitor_targets_legacy'
+            """
+        ).fetchone()
+        if not legacy_table_exists:
+            connection.execute("ALTER TABLE monitor_targets RENAME TO monitor_targets_legacy")
+
+        self._create_schema(connection)
+        connection.execute("DELETE FROM monitor_targets")
+        connection.execute("DELETE FROM monitor_groups")
+        default_group_id = self._create_group_row(connection, name=LEGACY_DEFAULT_GROUP_NAME)
+
+        legacy_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(monitor_targets_legacy)").fetchall()
+        }
+        general_price_column = "general_price" if "general_price" in legacy_columns else "lowest_general_price"
+        member_price_column = "member_price" if "member_price" in legacy_columns else "lowest_member_price"
+        subarea_key_expr = "subarea_key" if "subarea_key" in legacy_columns else "''"
+        subarea_label_expr = "subarea_label" if "subarea_label" in legacy_columns else "''"
+        room_type_id_expr = "room_type_id" if "room_type_id" in legacy_columns else "''"
+        room_type_name_expr = "room_type_name" if "room_type_name" in legacy_columns else "'全部房型'"
+        room_type_smoking_expr = "room_type_smoking" if "room_type_smoking" in legacy_columns else "''"
+
+        connection.execute(
+            f"""
             INSERT INTO monitor_targets (
                 id,
+                group_id,
                 hotel_code,
                 hotel_name,
                 area_key,
@@ -242,15 +387,16 @@ class MonitorRepository:
             )
             SELECT
                 id,
+                ?,
                 hotel_code,
                 hotel_name,
                 area_key,
                 area_label,
-                '',
-                '',
-                '',
-                '全部房型',
-                '',
+                {subarea_key_expr},
+                {subarea_label_expr},
+                {room_type_id_expr},
+                {room_type_name_expr},
+                {room_type_smoking_expr},
                 start_date,
                 end_date,
                 people,
@@ -261,21 +407,30 @@ class MonitorRepository:
                 last_checked_at,
                 last_status,
                 available_room_count,
-                lowest_general_price,
-                lowest_member_price,
+                {general_price_column},
+                {member_price_column},
                 error_message,
                 created_at,
                 updated_at
             FROM monitor_targets_legacy
-            """
+            """,
+            (default_group_id,),
         )
         connection.execute("DROP TABLE monitor_targets_legacy")
 
     def _create_schema(self, connection: sqlite3.Connection) -> None:
         connection.executescript(
             """
+            CREATE TABLE IF NOT EXISTS monitor_groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS monitor_targets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
                 hotel_code TEXT NOT NULL,
                 hotel_name TEXT NOT NULL,
                 area_key TEXT NOT NULL,
@@ -290,7 +445,7 @@ class MonitorRepository:
                 people INTEGER NOT NULL,
                 rooms INTEGER NOT NULL,
                 smoking TEXT NOT NULL,
-                check_interval_minutes INTEGER NOT NULL DEFAULT 60,
+                check_interval_minutes INTEGER NOT NULL DEFAULT 15,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 last_checked_at TEXT,
                 last_status TEXT NOT NULL DEFAULT 'pending',
@@ -300,14 +455,42 @@ class MonitorRepository:
                 error_message TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                UNIQUE(hotel_code, room_type_id, start_date, end_date, people, rooms, smoking)
+                UNIQUE(hotel_code, room_type_id, start_date, end_date, people, rooms, smoking),
+                FOREIGN KEY(group_id) REFERENCES monitor_groups(id) ON DELETE CASCADE
             );
             """
+        )
+
+    def _enforce_check_interval(self, connection: sqlite3.Connection) -> None:
+        table_exists = connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'monitor_targets'
+            """
+        ).fetchone()
+        if not table_exists:
+            return
+        connection.execute(
+            """
+            UPDATE monitor_targets
+            SET
+                check_interval_minutes = ?,
+                updated_at = ?
+            WHERE check_interval_minutes != ?
+            """,
+            (
+                DEFAULT_CHECK_INTERVAL_MINUTES,
+                utc_now().isoformat(),
+                DEFAULT_CHECK_INTERVAL_MINUTES,
+            ),
         )
 
     def _row_to_target(self, row: sqlite3.Row) -> MonitorTarget:
         return MonitorTarget(
             id=row["id"],
+            group_id=row["group_id"],
+            group_name=row["group_name"],
             hotel_code=row["hotel_code"],
             hotel_name=row["hotel_name"],
             area_key=row["area_key"],
@@ -333,3 +516,23 @@ class MonitorRepository:
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
+
+    def _create_group_row(self, connection: sqlite3.Connection, *, name: str) -> int:
+        now = utc_now().isoformat()
+        cursor = connection.execute(
+            """
+            INSERT INTO monitor_groups (name, created_at, updated_at)
+            VALUES (?, ?, ?)
+            """,
+            (name, now, now),
+        )
+        return int(cursor.lastrowid)
+
+    def _delete_group_if_empty(self, connection: sqlite3.Connection, group_id: int) -> None:
+        remaining = connection.execute(
+            "SELECT 1 FROM monitor_targets WHERE group_id = ? LIMIT 1",
+            (group_id,),
+        ).fetchone()
+        if remaining:
+            return
+        connection.execute("DELETE FROM monitor_groups WHERE id = ?", (group_id,))

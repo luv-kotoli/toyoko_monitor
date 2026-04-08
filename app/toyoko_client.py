@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import httpx
 
@@ -95,6 +96,15 @@ class Catalog:
     hotels_by_area: dict[str, list[HotelSummary]]
     hotels_by_subarea: dict[tuple[str, str], list[HotelSummary]]
     hotels_by_code: dict[str, HotelSummary]
+
+
+@dataclass(slots=True)
+class HotelPriceAvailability:
+    hotel_code: str
+    checked_at: datetime
+    lowest_price: int | None
+    exist_enough_vacant_rooms: bool
+    is_under_maintenance: bool
 
 
 class ToyokoClient:
@@ -261,6 +271,52 @@ class ToyokoClient:
             error_message=None,
         )
 
+    async def fetch_hotels_price_availability(
+        self,
+        *,
+        hotel_codes: list[str],
+        start_date: date,
+        end_date: date,
+        people: int,
+        rooms: int,
+        smoking: str,
+    ) -> dict[str, HotelPriceAvailability]:
+        if not hotel_codes:
+            return {}
+
+        checked_at = datetime.now(timezone.utc)
+        response = await self._client.get(
+            "/api/trpc/hotels.availabilities.prices",
+            params={
+                "batch": "1",
+                "input": self._build_prices_request_input(
+                    hotel_codes=hotel_codes,
+                    start_date=start_date,
+                    end_date=end_date,
+                    people=people,
+                    rooms=rooms,
+                    smoking=smoking,
+                ),
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        prices = ((payload[0].get("result") or {}).get("data") or {}).get("json", {}).get("prices", {})
+
+        results: dict[str, HotelPriceAvailability] = {}
+        for hotel_code in hotel_codes:
+            raw_price = prices.get(hotel_code)
+            if not isinstance(raw_price, dict):
+                continue
+            results[hotel_code] = HotelPriceAvailability(
+                hotel_code=hotel_code,
+                checked_at=checked_at,
+                lowest_price=self._coerce_int(raw_price.get("lowestPrice")),
+                exist_enough_vacant_rooms=bool(raw_price.get("existEnoughVacantRooms")),
+                is_under_maintenance=bool(raw_price.get("isUnderMaintenance")),
+            )
+        return results
+
     async def get_catalog(self, force_refresh: bool = False) -> Catalog:
         if not force_refresh and self._catalog and self._catalog_fetched_at:
             if datetime.now(timezone.utc) - self._catalog_fetched_at < timedelta(hours=12):
@@ -368,11 +424,48 @@ class ToyokoClient:
             self._build_id_fetched_at = datetime.now(timezone.utc)
             return self._build_id
 
+    def _build_prices_request_input(
+        self,
+        *,
+        hotel_codes: list[str],
+        start_date: date,
+        end_date: date,
+        people: int,
+        rooms: int,
+        smoking: str,
+    ) -> str:
+        payload = {
+            "0": {
+                "json": {
+                    "hotelCodes": hotel_codes,
+                    "checkinDate": self._to_trpc_date(start_date),
+                    "checkoutDate": self._to_trpc_date(end_date),
+                    "numberOfPeople": people,
+                    "numberOfRoom": rooms,
+                    "smokingType": smoking,
+                },
+                "meta": {
+                    "values": {
+                        "checkinDate": ["Date"],
+                        "checkoutDate": ["Date"],
+                    }
+                },
+            }
+        }
+        return json.dumps(payload, separators=(",", ":"))
+
     @staticmethod
     def _coerce_int(value: object) -> int | None:
         if value is None:
             return None
         return int(value)
+
+    @staticmethod
+    def _to_trpc_date(value: date) -> str:
+        local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+        local_datetime = datetime.combine(value, time.min, tzinfo=local_tz)
+        utc_datetime = local_datetime.astimezone(timezone.utc)
+        return utc_datetime.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     def _resolve_subarea_label(self, area_key: str, subarea_code: int) -> str:
         if area_key == "foreign":

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toyoko Monitor Settings</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260328a" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Toyoko Monitor Settings</p>
+          <h1>推送配置管理</h1>
+          <p class="hero-text">
+            这里统一管理 Bark 和 Server酱 推送配置。保存后会写入新的配置文件；测试按钮会直接使用当前表单值发一条测试通知。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a class="hero-shortcut hero-shortcut-neutral" href="/">
+            <span class="hero-shortcut-kicker">Quick Access</span>
+            <span class="hero-shortcut-title">返回监控主页</span>
+            <span class="hero-shortcut-meta">酒店查询 / 房型监控 / 手动刷新</span>
+          </a>
+          <a class="hero-shortcut hero-shortcut-accent" href="/logs">
+            <span class="hero-shortcut-kicker">Quick Access</span>
+            <span class="hero-shortcut-title">查看运行日志</span>
+            <span class="hero-shortcut-meta">应用日志 / 推送内容 / 推送结果</span>
+          </a>
+          <button id="reload-settings-button" class="hero-shortcut hero-shortcut-warm" type="button">
+            <span class="hero-shortcut-kicker">Reload</span>
+            <span class="hero-shortcut-title">重新读取配置</span>
+            <span class="hero-shortcut-meta">从磁盘刷新当前表单</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel settings-panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Push Settings</p>
+              <h2>通知 Provider 与参数</h2>
+            </div>
+            <div class="log-meta">
+              <span id="settings-status" class="muted">初始化中</span>
+            </div>
+          </div>
+
+          <div class="settings-meta">
+            <div class="settings-meta-card">
+              <span class="settings-meta-label">配置文件</span>
+              <code id="config-path" class="settings-meta-value">加载中...</code>
+            </div>
+            <div class="settings-meta-card">
+              <span class="settings-meta-label">配置来源</span>
+              <span id="config-source" class="settings-meta-value">加载中...</span>
+            </div>
+          </div>
+          <p id="settings-note" class="muted settings-note">加载中...</p>
+
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <div>
+                <p class="panel-kicker">Mode</p>
+                <h3>启用状态与推送方式</h3>
+              </div>
+            </div>
+
+            <div class="settings-switch-row">
+              <label class="checkbox-field">
+                <input id="notifications-enabled" type="checkbox" />
+                <span>启用监控推送</span>
+              </label>
+            </div>
+
+            <div class="provider-grid">
+              <label class="provider-card" data-provider-card="bark">
+                <input type="radio" name="push-provider" value="bark" />
+                <span class="provider-card-kicker">Provider</span>
+                <span class="provider-card-title">Bark</span>
+                <span class="provider-card-meta">支持标题、副标题、分组、图标、铃声、时效性通知等。</span>
+              </label>
+
+              <label class="provider-card" data-provider-card="serverchan">
+                <input type="radio" name="push-provider" value="serverchan" />
+                <span class="provider-card-kicker">Provider</span>
+                <span class="provider-card-title">Server酱</span>
+                <span class="provider-card-meta">沿用现有 SendKey / channel / noip 配置。</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" data-provider-section="bark">
+            <div class="settings-section-head">
+              <div>
+                <p class="panel-kicker">Bark</p>
+                <h3>Bark API 配置</h3>
+              </div>
+              <span class="muted">统一使用 `/key` 接口发送；默认按 `timeSensitive` 追加参数，`critical` 会自动附带 `call=1`，其余情况按 `call / sound` 追加参数，并固定附带 `badge=1`。</span>
+            </div>
+
+            <div class="settings-grid settings-grid-two">
+              <label class="field settings-field">
+                <span>Bark API 地址</span>
+                <input id="bark-base-url" type="text" placeholder="https://api.day.app" />
+              </label>
+              <label class="field settings-field">
+                <span>Bark Key</span>
+                <input id="bark-device-key" type="text" />
+              </label>
+              <label class="field settings-field">
+                <span>标题前缀</span>
+                <input id="bark-title-prefix" type="text" placeholder="Toyoko Monitor" />
+              </label>
+              <label class="field settings-field">
+                <span>默认跳转 URL</span>
+                <input id="bark-url" type="text" placeholder="https://example.com" />
+              </label>
+              <label class="field settings-field">
+                <span>默认分组</span>
+                <input id="bark-group" type="text" placeholder="toyoko" />
+              </label>
+              <label class="field settings-field">
+                <span>默认图标 URL</span>
+                <input id="bark-icon" type="text" placeholder="https://..." />
+              </label>
+              <label class="field settings-field">
+                <span>默认铃声</span>
+                <input id="bark-sound" type="text" placeholder="alarm" />
+              </label>
+              <label class="field settings-field">
+                <span>时效性级别</span>
+                <select id="bark-level">
+                  <option value="timeSensitive" selected>timeSensitive（默认）</option>
+                  <option value="active">active</option>
+                  <option value="passive">passive</option>
+                  <option value="critical">critical</option>
+                </select>
+              </label>
+              <label class="field settings-field settings-field-wide">
+                <span>ciphertext</span>
+                <input id="bark-ciphertext" type="text" placeholder="可选；如果你在 Bark 端使用加密推送可填写这里" />
+              </label>
+            </div>
+
+            <div class="settings-switch-row">
+              <label class="checkbox-field">
+                <input id="bark-call" type="checkbox" />
+                <span>非 critical 时开启 `call=1`；若选择 critical，会自动附带 `call=1`</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" data-provider-section="serverchan">
+            <div class="settings-section-head">
+              <div>
+                <p class="panel-kicker">ServerChan</p>
+                <h3>Server酱 配置</h3>
+              </div>
+            </div>
+
+            <div class="settings-grid settings-grid-two">
+              <label class="field settings-field">
+                <span>SendKey</span>
+                <input id="serverchan-send-key" type="text" />
+              </label>
+              <label class="field settings-field">
+                <span>推送通道 channel</span>
+                <input id="serverchan-channel" type="text" placeholder="9" />
+              </label>
+              <label class="field settings-field">
+                <span>noip</span>
+                <select id="serverchan-noip">
+                  <option value="1">1</option>
+                  <option value="0">0</option>
+                  <option value="">不发送该字段</option>
+                </select>
+              </label>
+              <label class="field settings-field">
+                <span>标题前缀</span>
+                <input id="serverchan-title-prefix" type="text" placeholder="Toyoko Monitor" />
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-head">
+              <div>
+                <p class="panel-kicker">Test</p>
+                <h3>测试推送内容</h3>
+              </div>
+              <span class="muted">测试按钮会直接按当前表单配置发送。Bark 会统一走当前 `/key` 接口，并沿用当前 `sound / call / level / badge=1` 参数规则；Server酱 会把 subtitle 合并进正文。</span>
+            </div>
+
+            <div class="settings-grid settings-grid-two">
+              <label class="field settings-field">
+                <span>测试标题 title</span>
+                <input id="test-title" type="text" />
+              </label>
+              <label class="field settings-field">
+                <span>测试副标题 subtitle</span>
+                <input id="test-subtitle" type="text" />
+              </label>
+              <label class="field settings-field settings-field-wide">
+                <span>测试正文 body</span>
+                <textarea id="test-body" class="input-textarea" rows="8"></textarea>
+              </label>
+            </div>
+
+            <div class="settings-actions">
+              <button id="save-settings-button" class="btn btn-primary" type="button">保存配置</button>
+              <button id="test-notification-button" class="btn btn-secondary" type="button">发送测试</button>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/settings.js?v=20260329b" defer></script>
+  </body>
+</html>

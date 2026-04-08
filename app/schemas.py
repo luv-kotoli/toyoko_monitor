@@ -91,11 +91,14 @@ class MonitorSelection(BaseModel):
 
 
 class CreateMonitorTargetsRequest(SearchCriteria):
+    group_name: str = Field(min_length=1, max_length=80)
     targets: list[MonitorSelection] = Field(min_length=1)
 
 
 class MonitorTarget(BaseModel):
     id: int
+    group_id: int
+    group_name: str
     hotel_code: str
     hotel_name: str
     area_key: str
@@ -124,6 +127,14 @@ class MonitorTarget(BaseModel):
 
 class RefreshResponse(BaseModel):
     refreshed_count: int
+
+
+class MonitorGroupUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class MonitorGroupEnabledUpdateRequest(BaseModel):
+    enabled: bool
 
 
 class LogSection(BaseModel):
