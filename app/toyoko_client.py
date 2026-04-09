@@ -442,7 +442,7 @@ class ToyokoClient:
                     "checkoutDate": self._to_trpc_date(end_date),
                     "numberOfPeople": people,
                     "numberOfRoom": rooms,
-                    "smokingType": smoking,
+                    "smokingType": self._normalize_prices_smoking_type(smoking),
                 },
                 "meta": {
                     "values": {
@@ -466,6 +466,10 @@ class ToyokoClient:
         local_datetime = datetime.combine(value, time.min, tzinfo=local_tz)
         utc_datetime = local_datetime.astimezone(timezone.utc)
         return utc_datetime.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    @staticmethod
+    def _normalize_prices_smoking_type(smoking: str) -> str:
+        return "all" if smoking == "-all" else smoking
 
     def _resolve_subarea_label(self, area_key: str, subarea_code: int) -> str:
         if area_key == "foreign":
