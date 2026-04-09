@@ -1,6 +1,6 @@
 # Toyoko Monitor
 
-一个本地运行的东横 INN 空房监控工具。当前版本提供酒店目录浏览、空房查询、房型级监控、Bark / Server酱 推送、运行日志查看，以及 Windows / WSL 常驻启动脚本。
+一个本地运行的东横 INN 空房监控工具。当前版本提供酒店目录浏览、空房查询、房型级监控、Bark / Server酱 推送、运行日志查看，以及 WSL / Windows 常驻启动脚本。
 
 ## 当前能力
 
@@ -14,34 +14,53 @@
 ## 运行要求
 
 - Python `3.12+`
-- `conda`，推荐 `Miniforge`
+- `conda`，推荐 `Miniforge`，镜像之类请自行选用
 - 本地浏览器
 
-运行时依赖不再手工写在 `requirements.txt` 里，统一以 [pyproject.toml](/mnt/d/github/toyoko_monitor/pyproject.toml) 为准。当前声明的运行依赖是：
+## 依赖来源
+
+这个仓库当前不维护手写 `requirements.txt`。运行依赖统一由 [pyproject.toml](./pyproject.toml) 管理。
+
+当前声明的运行依赖是：
 
 - `fastapi`
 - `httpx`
 - `pydantic`
 - `uvicorn[standard]`
 
-如果后续要增删依赖，请直接修改 [pyproject.toml](/mnt/d/github/toyoko_monitor/pyproject.toml) 的 `[project.dependencies]` 和 `requires-python`。
+如果后续需要增删依赖，请直接修改 [pyproject.toml](./pyproject.toml) 的：
 
-## 用 `pyproject.toml` 管理环境
+- `[project.dependencies]`
+- `requires-python`
 
-这个仓库当前不维护手写 `requirements.txt`。推荐流程是：
+安装依赖时，推荐直接用：
 
-1. 先创建一个名字就叫 `web` 的 conda 环境。
-2. 激活这个环境。
-3. 用 `pip install -e .` 按 [pyproject.toml](/mnt/d/github/toyoko_monitor/pyproject.toml) 安装项目。
+```bash
+python -m pip install -e .
+```
 
-不要假设机器上已经有一个可以“直接进入”的 `web` 环境。你需要先自己创建它，而且环境名必须是 `web`。
+这条命令会按 [pyproject.toml](./pyproject.toml) 安装项目，不需要再手工维护一份独立的 `requirements.txt`。
 
-原因是：
+如果你只是想导出当前环境快照，可以在安装完成后执行：
 
-- [scripts/run_service.sh](/mnt/d/github/toyoko_monitor/scripts/run_service.sh) 里写死了 `conda activate web`
-- Windows 包装脚本最终也是调用这个启动脚本
+```bash
+python -m pip freeze > requirements.lock.txt
+```
 
-标准安装步骤：
+这个 `requirements.lock.txt` 只是快照，不应替代 [pyproject.toml](./pyproject.toml) 作为依赖源。
+
+## Conda 环境
+
+环境名不一定非得叫 `web`。你可以使用任意 conda 环境名。
+
+不过需要注意：
+
+- [scripts/run_service.sh](./scripts/run_service.sh) 默认会尝试激活 `web`
+- 如果你使用别的环境名，需要在运行脚本前设置环境变量 `TOYOKO_MONITOR_CONDA_ENV`
+
+推荐流程如下。
+
+如果你愿意沿用默认值 `web`：
 
 ```bash
 conda create -n web python=3.12 -y
@@ -50,36 +69,34 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-如果你修改了 [pyproject.toml](/mnt/d/github/toyoko_monitor/pyproject.toml)，重新执行一次：
+如果你想用别的环境名，例如 `toyoko`：
 
 ```bash
-conda activate web
+conda create -n toyoko python=3.12 -y
+conda activate toyoko
+python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-如果你只想做非 editable 安装，也可以：
+然后在调用 [scripts/run_service.sh](./scripts/run_service.sh) 前设置：
 
 ```bash
-conda activate web
-python -m pip install .
+export TOYOKO_MONITOR_CONDA_ENV=toyoko
 ```
 
-如果你确实需要导出一份当前环境快照，再在安装完成后执行：
+如果脚本无法自动找到 `conda.sh`，还可以额外指定：
 
 ```bash
-conda activate web
-python -m pip freeze > requirements.lock.txt
+export TOYOKO_MONITOR_CONDA_SH=/path/to/conda.sh
 ```
-
-这个 `requirements.lock.txt` 只是环境快照，不应替代 [pyproject.toml](/mnt/d/github/toyoko_monitor/pyproject.toml) 作为依赖源。
 
 ## 本地运行
 
-启动开发服务：
+在仓库根目录执行：
 
 ```bash
-conda activate web
-cd /mnt/d/github/toyoko_monitor
+conda activate <your-conda-env>
+python -m pip install -e .
 PYTHONPATH=. python -m uvicorn app.main:app --reload
 ```
 
@@ -92,18 +109,87 @@ PYTHONPATH=. python -m uvicorn app.main:app --reload
 快速自检：
 
 ```bash
-conda activate web
-cd /mnt/d/github/toyoko_monitor
+conda activate <your-conda-env>
 python -m compileall app
 ```
 
 ## 数据、配置与日志
 
-- 数据库： [data/toyoko_monitor.db](/mnt/d/github/toyoko_monitor/data/toyoko_monitor.db)
-- 推送配置： [data/notification.json](/mnt/d/github/toyoko_monitor/data/notification.json)
-- 应用日志目录： [logs](/mnt/d/github/toyoko_monitor/logs)
-- 推送内容日志： [logs/push.content.log](/mnt/d/github/toyoko_monitor/logs/push.content.log)
-- 推送结果日志： [logs/push.result.log](/mnt/d/github/toyoko_monitor/logs/push.result.log)
+- 数据库：`data/toyoko_monitor.db`
+- 推送配置：`data/notification.json`
+- 应用日志目录：`logs/`
+- 推送内容日志：`logs/push.content.log`
+- 推送结果日志：`logs/push.result.log`
+
+## 推送配置文件
+
+统一推送配置文件位置：
+
+- `data/notification.json`
+
+项目当前优先读取这份文件。旧版 `data/serverchan.json` 只用于兼容旧配置导入，不建议继续作为主配置使用。
+
+`data/notification.json` 的结构如下：
+
+```json
+{
+  "enabled": true,
+  "provider": "bark",
+  "serverchan": {
+    "send_key": "YOUR_SERVERCHAN_SEND_KEY",
+    "channel": "9",  //推送微信，其他参数可以查看serverchan的文档
+    "noip": 1,
+    "title_prefix": "Toyoko Monitor"
+  },
+  "bark": {
+    "base_url": "https://api.day.app",
+    "device_key": "YOUR_BARK_DEVICE_KEY",
+    "title_prefix": "Toyoko Monitor",
+    "url": "",
+    "group": "",
+    "icon": "",
+    "sound": "alarm",
+    "call": false,
+    "ciphertext": "",
+    "level": "timeSensitive"
+  }
+}
+```
+
+字段说明：
+
+- `enabled`
+  当前是否启用推送总开关。
+- `provider`
+  当前使用哪个推送通道，可选 `bark` 或 `serverchan`。
+- `serverchan.send_key`
+  Server酱 SendKey，占位符写法请替换成你自己的真实值。
+- `serverchan.channel`
+  Server酱 推送通道。
+- `serverchan.noip`
+  是否隐藏调用方 IP；可为 `1`、`0` 或 `null`。
+- `serverchan.title_prefix`
+  Server酱 标题前缀。
+- `bark.base_url`
+  Bark 服务地址，默认是官方地址。
+- `bark.device_key`
+  Bark 设备 Key，占位符写法请替换成你自己的真实值。
+- `bark.title_prefix`
+  Bark 标题前缀。
+- `bark.url`
+  点击通知后的跳转地址。
+- `bark.group`
+  Bark 通知分组。
+- `bark.icon`
+  Bark 图标地址。
+- `bark.sound`
+  普通铃声名称。
+- `bark.call`
+  是否附带 `call=1`。
+- `bark.ciphertext`
+  Bark 加密推送字段。
+- `bark.level`
+  Bark 时效性级别，可选 `active`、`timeSensitive`、`passive`、`critical`。
 
 ## 刷新与查询逻辑
 
@@ -129,23 +215,28 @@ python -m compileall app
 
 ## WSL / Windows 常驻运行
 
-如果你在 WSL 中运行本项目，最稳的方式仍然是：
+如果你在 WSL 中运行本项目，比较稳的方式是：
 
 - Windows 任务计划程序负责开机 / 登录时拉起
-- 实际服务进程仍由 WSL 里的 [scripts/run_service.sh](/mnt/d/github/toyoko_monitor/scripts/run_service.sh) 启动
+- 实际服务进程由 WSL 里的 [scripts/run_service.sh](./scripts/run_service.sh) 启动
 
 ### 从 WSL 手动启动
 
 ```bash
-cd /mnt/d/github/toyoko_monitor
 ./scripts/run_service.sh
 ```
 
 停止：
 
 ```bash
-cd /mnt/d/github/toyoko_monitor
 ./scripts/stop_service.sh
+```
+
+如果你没有使用默认环境名 `web`，先设置：
+
+```bash
+export TOYOKO_MONITOR_CONDA_ENV=<your-conda-env>
+./scripts/run_service.sh
 ```
 
 ### 从 Windows 手动启动
@@ -153,19 +244,18 @@ cd /mnt/d/github/toyoko_monitor
 启动：
 
 ```bat
-D:\github\toyoko_monitor\scripts\windows\start-toyoko-monitor.cmd
+scripts\windows\start-toyoko-monitor.cmd
 ```
 
 停止：
 
 ```bat
-D:\github\toyoko_monitor\scripts\windows\stop-toyoko-monitor.cmd
+scripts\windows\stop-toyoko-monitor.cmd
 ```
 
 ### 注册为登录自启
 
 ```powershell
-cd D:\github\toyoko_monitor
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-startup-task.ps1
 ```
 
@@ -178,7 +268,6 @@ Start-ScheduledTask -TaskName ToyokoMonitor
 移除：
 
 ```powershell
-cd D:\github\toyoko_monitor
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\remove-startup-task.ps1
 ```
 
@@ -189,26 +278,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows\remove-startup-task.p
 安装：
 
 ```powershell
-cd D:\github\toyoko_monitor
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1
 ```
 
 卸载：
 
 ```powershell
-cd D:\github\toyoko_monitor
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\remove-service.ps1
 ```
 
 ### 日志文件
 
-- [logs/uvicorn.stdout.log](/mnt/d/github/toyoko_monitor/logs/uvicorn.stdout.log)
-- [logs/uvicorn.stderr.log](/mnt/d/github/toyoko_monitor/logs/uvicorn.stderr.log)
-- [logs/nssm-service.stdout.log](/mnt/d/github/toyoko_monitor/logs/nssm-service.stdout.log)
-- [logs/nssm-service.stderr.log](/mnt/d/github/toyoko_monitor/logs/nssm-service.stderr.log)
+- `logs/uvicorn.stdout.log`
+- `logs/uvicorn.stderr.log`
+- `logs/nssm-service.stdout.log`
+- `logs/nssm-service.stderr.log`
 
 ## 注意事项
 
-- 如果你的 Miniforge / conda 初始化脚本路径不是 `/home/yuxx/miniforge3/etc/profile.d/conda.sh`，请同步修改 [scripts/run_service.sh](/mnt/d/github/toyoko_monitor/scripts/run_service.sh)。
-- 如果你把 conda 环境命名成别的名字，启动脚本和 Windows 包装脚本不会自动适配。
-- 当前实现使用东横官网日文站点数据，酒店名、地区名、房型名会保持日文。
+- 如果 `scripts/run_service.sh` 无法自动探测 conda 初始化脚本，可以显式设置 `TOYOKO_MONITOR_CONDA_SH`
+- 如果你使用了非默认环境名，请显式设置 `TOYOKO_MONITOR_CONDA_ENV`
+- 当前实现使用东横官网日文站点数据，酒店名、地区名、房型名会保持日文
