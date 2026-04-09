@@ -7,8 +7,8 @@
 - 按地区加载东横官网酒店目录
 - 选择入住 / 退房日期后，批量查询所选酒店的空房情况
 - 从查询结果中选择具体房型，加入本地监控
-- 后台固定每 15 分钟自动刷新监控状态
-- 推送配置页统一管理 Bark / Server酱，并支持测试发送
+- 后台按统一配置的刷新间隔自动刷新监控状态
+- 主页监控区可设置刷新间隔；设置页统一管理 Bark / Server酱 配置，并支持测试发送
 - 日志页查看应用日志、推送内容日志、推送结果日志
 
 ## 运行要求
@@ -103,7 +103,7 @@ PYTHONPATH=. python -m uvicorn app.main:app --reload
 启动后打开：
 
 - 主页：`http://127.0.0.1:8000`
-- 推送配置页：`http://127.0.0.1:8000/settings`
+- 设置页：`http://127.0.0.1:8000/settings`
 - 日志页：`http://127.0.0.1:8000/logs`
 
 快速自检：
@@ -116,12 +116,12 @@ python -m compileall app
 ## 数据、配置与日志
 
 - 数据库：`data/toyoko_monitor.db`
-- 推送配置：`data/notification.json`
+- 统一配置：`data/notification.json`
 - 应用日志目录：`logs/`
 - 推送内容日志：`logs/push.content.log`
 - 推送结果日志：`logs/push.result.log`
 
-## 推送配置文件
+## 统一配置文件
 
 统一推送配置文件位置：
 
@@ -135,9 +135,12 @@ python -m compileall app
 {
   "enabled": true,
   "provider": "bark",
+  "monitor": {
+    "check_interval_minutes": 15
+  },
   "serverchan": {
     "send_key": "YOUR_SERVERCHAN_SEND_KEY",
-    "channel": "9",  //推送微信，其他参数可以查看serverchan的文档
+    "channel": "9",
     "noip": 1,
     "title_prefix": "Toyoko Monitor"
   },
@@ -162,6 +165,8 @@ python -m compileall app
   当前是否启用推送总开关。
 - `provider`
   当前使用哪个推送通道，可选 `bark` 或 `serverchan`。
+- `monitor.check_interval_minutes`
+  房型监控统一刷新间隔，单位是分钟；保存后会同步到现有监控项和后续新建监控。
 - `serverchan.send_key`
   Server酱 SendKey，占位符写法请替换成你自己的真实值。
 - `serverchan.channel`
@@ -193,7 +198,7 @@ python -m compileall app
 
 ## 刷新与查询逻辑
 
-- 监控刷新间隔固定为 15 分钟
+- 监控刷新间隔默认是 15 分钟，也可以在设置页或主页监控区修改
 - 手动空房查询仍然会按所选酒店逐个抓取 `room_plan` 明细
 - 后台监控刷新已经加了预筛逻辑：
   - 同一批日期 / 人数 / 房间数 / 吸烟条件下，先调用 `hotels.availabilities.prices`

@@ -400,6 +400,29 @@ textarea {
   margin-bottom: 12px;
 }
 
+.monitor-interval-box {
+  min-width: 280px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.monitor-interval-field {
+  gap: 10px;
+}
+
+.monitor-interval-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.monitor-interval-inline input {
+  min-width: 0;
+  flex: 1 1 120px;
+}
+
 .muted {
   color: var(--ink-soft);
 }
@@ -1077,5 +1100,15 @@ th {
 
   .settings-actions .btn {
     width: 100%;
+  }
+
+  .monitor-interval-box {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .monitor-interval-inline {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

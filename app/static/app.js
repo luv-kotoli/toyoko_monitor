@@ -7,6 +7,9 @@ const state = {
   selectedHotelCodes: new Set(),
   selectedRoomTargets: new Set(),
   expandedGroupIds: new Set(),
+  monitorSettings: {
+    check_interval_minutes: 15,
+  },
 };
 
 const elements = {
@@ -21,6 +24,9 @@ const elements = {
   searchButton: document.querySelector("#search-button"),
   addMonitorButton: document.querySelector("#add-monitor-button"),
   refreshMonitorButton: document.querySelector("#refresh-monitor-button"),
+  monitorToolbarNote: document.querySelector("#monitor-toolbar-note"),
+  monitorCheckIntervalInput: document.querySelector("#monitor-check-interval-input"),
+  saveMonitorIntervalButton: document.querySelector("#save-monitor-interval-button"),
   selectAllHotelsButton: document.querySelector("#select-all-hotels-button"),
   clearSelectedHotelsButton: document.querySelector("#clear-selected-hotels-button"),
   catalogCount: document.querySelector("#catalog-count"),
@@ -59,6 +65,10 @@ function bindEvents() {
     void refreshMonitorTargets();
   });
 
+  elements.saveMonitorIntervalButton.addEventListener("click", () => {
+    void saveMonitorSettings();
+  });
+
   elements.selectAllHotelsButton.addEventListener("click", () => {
     state.catalog.forEach((hotel) => state.selectedHotelCodes.add(hotel.hotel_code));
     renderCatalog();
@@ -74,6 +84,7 @@ async function initialize() {
   setStatus("加载区域列表中");
   try {
     await loadAreas();
+    await loadMonitorSettings();
     await loadMonitorTargets();
     setStatus("可用");
   } catch (error) {
@@ -388,6 +399,34 @@ async function loadMonitorTargets() {
   } catch (error) {
     console.error(error);
     setStatus(`加载监控失败: ${error.message}`);
+  }
+}
+
+async function loadMonitorSettings() {
+  const response = await api("/api/settings/monitor");
+  state.monitorSettings = response.monitor || { check_interval_minutes: 15 };
+  renderMonitorSettings();
+}
+
+async function saveMonitorSettings() {
+  const checkIntervalMinutes = parseCheckInterval(elements.monitorCheckIntervalInput.value);
+  elements.saveMonitorIntervalButton.disabled = true;
+  setStatus(`正在保存刷新间隔: ${checkIntervalMinutes} 分钟`);
+  try {
+    const response = await api("/api/settings/monitor", {
+      method: "PUT",
+      body: JSON.stringify({
+        check_interval_minutes: checkIntervalMinutes,
+      }),
+    });
+    state.monitorSettings = response.monitor || { check_interval_minutes: checkIntervalMinutes };
+    renderMonitorSettings();
+    setStatus(`刷新间隔已更新为 ${state.monitorSettings.check_interval_minutes} 分钟`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`刷新间隔保存失败: ${error.message}`);
+  } finally {
+    elements.saveMonitorIntervalButton.disabled = false;
   }
 }
 
@@ -728,6 +767,13 @@ function buildSuggestedGroupName() {
   return `${startDate}-${endDate}${trimRegionLabel(regionLabel)}`;
 }
 
+function renderMonitorSettings() {
+  const interval = state.monitorSettings?.check_interval_minutes || 15;
+  elements.monitorCheckIntervalInput.value = String(interval);
+  elements.monitorToolbarNote.textContent =
+    `监控项会保存到本地 SQLite，按组折叠展示；点击组行即可展开或收起。当前统一刷新间隔为 ${interval} 分钟。`;
+}
+
 function collectCriteria() {
   return {
     start_date: elements.startDate.value,
@@ -810,6 +856,14 @@ function formatShortDate(value) {
   }
   const [, month, day] = value.split("-");
   return `${Number(month)}.${Number(day)}`;
+}
+
+function parseCheckInterval(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 15;
+  }
+  return Math.min(1440, Math.round(parsed));
 }
 
 function toInputDate(date) {

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Toyoko Monitor</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260328a" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260409a" />
   </head>
   <body>
     <div class="page-shell">
@@ -13,7 +13,7 @@
           <p class="eyebrow">Toyoko Inn Vacancy Monitor</p>
           <h1>本地空房监控面板</h1>
           <p class="hero-text">
-            先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，每 15 分钟自动刷新。
+            先选大区块和小区块，再从日文酒店目录里勾选要查询的酒店。查询后可直接按房型加入监控，并按当前配置的间隔自动刷新。
           </p>
         </div>
         <div class="hero-actions">
@@ -126,7 +126,20 @@
           </div>
 
           <div class="toolbar">
-            <p class="muted">监控项会保存到本地 SQLite，按组折叠展示；点击组行即可展开或收起。</p>
+            <p id="monitor-toolbar-note" class="muted">
+              监控项会保存到本地 SQLite，按组折叠展示；点击组行即可展开或收起。
+            </p>
+            <div class="monitor-interval-box">
+              <label class="field monitor-interval-field">
+                <span>刷新间隔（分钟）</span>
+                <div class="monitor-interval-inline">
+                  <input id="monitor-check-interval-input" type="number" min="1" max="1440" step="1" />
+                  <button id="save-monitor-interval-button" class="btn btn-secondary btn-small" type="button">
+                    保存间隔
+                  </button>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div class="table-wrap">
@@ -151,6 +164,6 @@
       </main>
     </div>
 
-    <script src="/static/app.js?v=20260328a" defer></script>
+    <script src="/static/app.js?v=20260409a" defer></script>
   </body>
 </html>

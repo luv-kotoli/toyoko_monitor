@@ -8,10 +8,12 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .database import DEFAULT_CHECK_INTERVAL_MINUTES, MonitorRepository
+from .database import MonitorRepository
 from .log_utils import configure_logging, read_log_sections
 from .monitor_service import MonitorService
 from .notifications import (
+    MonitorSettings,
+    MonitorSettingsResponse,
     NotificationService,
     NotificationSettings,
     NotificationSettingsResponse,
@@ -53,9 +55,16 @@ notification_service = NotificationService(
 monitor_service = MonitorService(repository=repository, client=client, notifier=notification_service)
 
 
+def sync_monitor_check_interval(*, minutes: int) -> int:
+    updated_count = repository.set_all_check_interval_minutes(minutes)
+    logger.info("Monitor check interval synced: minutes=%s updated_count=%s", minutes, updated_count)
+    return updated_count
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     repository.initialize()
+    sync_monitor_check_interval(minutes=notification_service.load_settings().monitor.check_interval_minutes)
     monitor_service.start()
     try:
         yield
@@ -145,7 +154,21 @@ async def get_notification_settings() -> NotificationSettingsResponse:
 
 @app.put("/api/settings/notifications", response_model=NotificationSettingsResponse)
 async def save_notification_settings(config: NotificationSettings) -> NotificationSettingsResponse:
-    return notification_service.save_settings(config)
+    response = notification_service.save_settings(config)
+    sync_monitor_check_interval(minutes=response.config.monitor.check_interval_minutes)
+    return response
+
+
+@app.get("/api/settings/monitor", response_model=MonitorSettingsResponse)
+async def get_monitor_settings() -> MonitorSettingsResponse:
+    return notification_service.get_monitor_settings_response()
+
+
+@app.put("/api/settings/monitor", response_model=MonitorSettingsResponse)
+async def save_monitor_settings(config: MonitorSettings) -> MonitorSettingsResponse:
+    response = notification_service.save_monitor_settings(config)
+    sync_monitor_check_interval(minutes=response.monitor.check_interval_minutes)
+    return response
 
 
 @app.post("/api/settings/notifications/test", response_model=NotificationTestResponse)
@@ -165,6 +188,7 @@ async def create_monitor_targets(request: CreateMonitorTargetsRequest) -> list[M
     hotel_map = {hotel.hotel_code: hotel for hotel in hotels}
     if not hotels:
         raise HTTPException(status_code=404, detail="未找到要加入监控的酒店。")
+    check_interval_minutes = notification_service.load_settings().monitor.check_interval_minutes
 
     group_name = request.group_name.strip()
     if not group_name:
@@ -188,7 +212,7 @@ async def create_monitor_targets(request: CreateMonitorTargetsRequest) -> list[M
             "people": request.people,
             "rooms": request.rooms,
             "smoking": request.smoking,
-            "check_interval_minutes": DEFAULT_CHECK_INTERVAL_MINUTES,
+            "check_interval_minutes": check_interval_minutes,
         }
         for target in request.targets
         if target.hotel_code in hotel_map

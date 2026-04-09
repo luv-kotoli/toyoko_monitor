@@ -27,7 +27,6 @@ class MonitorRepository:
                 self._migrate_schema(connection)
             else:
                 self._create_schema(connection)
-            self._enforce_check_interval(connection)
 
     def list_targets(self) -> list[MonitorTarget]:
         with self._connect() as connection:
@@ -277,6 +276,24 @@ class MonitorRepository:
                 ),
             )
 
+    def set_all_check_interval_minutes(self, check_interval_minutes: int) -> int:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE monitor_targets
+                SET
+                    check_interval_minutes = ?,
+                    updated_at = ?
+                WHERE check_interval_minutes != ?
+                """,
+                (
+                    check_interval_minutes,
+                    utc_now().isoformat(),
+                    check_interval_minutes,
+                ),
+            )
+            return cursor.rowcount
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
@@ -459,31 +476,6 @@ class MonitorRepository:
                 FOREIGN KEY(group_id) REFERENCES monitor_groups(id) ON DELETE CASCADE
             );
             """
-        )
-
-    def _enforce_check_interval(self, connection: sqlite3.Connection) -> None:
-        table_exists = connection.execute(
-            """
-            SELECT 1
-            FROM sqlite_master
-            WHERE type = 'table' AND name = 'monitor_targets'
-            """
-        ).fetchone()
-        if not table_exists:
-            return
-        connection.execute(
-            """
-            UPDATE monitor_targets
-            SET
-                check_interval_minutes = ?,
-                updated_at = ?
-            WHERE check_interval_minutes != ?
-            """,
-            (
-                DEFAULT_CHECK_INTERVAL_MINUTES,
-                utc_now().isoformat(),
-                DEFAULT_CHECK_INTERVAL_MINUTES,
-            ),
         )
 
     def _row_to_target(self, row: sqlite3.Row) -> MonitorTarget:

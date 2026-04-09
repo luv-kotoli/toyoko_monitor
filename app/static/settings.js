@@ -1,3 +1,9 @@
+const state = {
+  loadedMonitor: {
+    check_interval_minutes: 15,
+  },
+};
+
 const elements = {
   settingsStatus: document.querySelector("#settings-status"),
   reloadButton: document.querySelector("#reload-settings-button"),
@@ -130,6 +136,7 @@ function collectConfig() {
   return {
     enabled: elements.notificationsEnabled.checked,
     provider: getSelectedProvider(),
+    monitor: state.loadedMonitor,
     bark: {
       base_url: elements.barkBaseUrl.value.trim(),
       device_key: elements.barkDeviceKey.value.trim(),
@@ -154,6 +161,7 @@ function collectConfig() {
 function fillForm(config) {
   elements.notificationsEnabled.checked = Boolean(config.enabled);
   const provider = config.provider || "bark";
+  state.loadedMonitor = config.monitor || { check_interval_minutes: 15 };
   elements.providerInputs.forEach((input) => {
     input.checked = input.value === provider;
   });
