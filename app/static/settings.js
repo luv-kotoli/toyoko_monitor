@@ -91,6 +91,9 @@ async function saveSettings() {
   toggleActionButtons(true);
   try {
     const config = collectConfig();
+    if (!validateProviderCredential(config)) {
+      return;
+    }
     const response = await api("/api/settings/notifications", {
       method: "PUT",
       body: JSON.stringify(config),
@@ -113,8 +116,12 @@ async function sendTestNotification() {
   setStatus("正在发送测试推送");
   toggleActionButtons(true);
   try {
+    const config = collectConfig();
+    if (!validateProviderCredential(config, { requireCredential: true })) {
+      return;
+    }
     const payload = {
-      config: collectConfig(),
+      config,
       title: elements.testTitle.value.trim(),
       subtitle: elements.testSubtitle.value.trim(),
       body: elements.testBody.value.trim(),
@@ -156,6 +163,31 @@ function collectConfig() {
       title_prefix: elements.serverchanTitlePrefix.value.trim(),
     },
   };
+}
+
+function validateProviderCredential(config, { requireCredential = false } = {}) {
+  if (!requireCredential && !config.enabled) {
+    return true;
+  }
+
+  let message = "";
+  let target = null;
+  if (config.provider === "bark" && !config.bark.device_key) {
+    message = "请先填写 Bark Device Key，再启用或测试 Bark 推送。";
+    target = elements.barkDeviceKey;
+  } else if (config.provider === "serverchan" && !config.serverchan.send_key) {
+    message = "请先填写 Server酱 SendKey，再启用或测试 Server酱 推送。";
+    target = elements.serverchanSendKey;
+  }
+
+  if (!message) {
+    return true;
+  }
+
+  window.alert(message);
+  setStatus(message);
+  target.focus();
+  return false;
 }
 
 function fillForm(config) {

@@ -178,7 +178,7 @@ python -m compileall app
 - `bark.base_url`
   Bark 服务地址，默认是官方地址。
 - `bark.device_key`
-  Bark 设备 Key，占位符写法请替换成你自己的真实值。
+  Bark 设备 Key。源码不提供默认值；关闭推送时可以留空，启用或测试 Bark 前必须在设置页填写。
 - `bark.title_prefix`
   Bark 标题前缀。
 - `bark.url`

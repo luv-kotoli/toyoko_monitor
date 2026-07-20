@@ -14,7 +14,6 @@ from .serverchan import NotificationSnapshot, ServerChanConfig, ServerChanNotifi
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BARK_DEVICE_KEY = "PZDUg7ExYcsRsrUc6dceUD"
 NotificationProvider = Literal["serverchan", "bark"]
 NotificationConfigSource = Literal["notification", "legacy_serverchan", "default"]
 MIN_CHECK_INTERVAL_MINUTES = 1
@@ -37,7 +36,7 @@ class ServerChanSettings(BaseModel):
 
 class BarkSettings(BaseModel):
     base_url: str = DEFAULT_BARK_BASE_URL
-    device_key: str = DEFAULT_BARK_DEVICE_KEY
+    device_key: str = ""
     title_prefix: str = "Toyoko Monitor"
     url: str = ""
     group: str = ""
@@ -106,6 +105,14 @@ class NotificationTestRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     subtitle: str = Field(default="", max_length=120)
     body: str = Field(min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def validate_selected_provider(self) -> "NotificationTestRequest":
+        if self.config.provider == "serverchan" and not self.config.serverchan.send_key:
+            raise ValueError("发送 Server酱 测试前，请先填写 SendKey。")
+        if self.config.provider == "bark" and not self.config.bark.device_key:
+            raise ValueError("发送 Bark 测试前，请先填写 Bark Device Key。")
+        return self
 
 
 class NotificationTestResponse(BaseModel):
@@ -237,7 +244,7 @@ class NotificationService:
             except Exception:
                 logger.exception("Failed to parse legacy ServerChan config: %s", self.legacy_serverchan_path)
 
-        return NotificationSettings(provider="bark"), "default"
+        return NotificationSettings(enabled=False, provider="bark"), "default"
 
     def _save_config(self, config: NotificationSettings) -> None:
         self.config_path.write_text(

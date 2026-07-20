@@ -97,7 +97,7 @@
                 <p class="panel-kicker">Bark</p>
                 <h3>Bark API 配置</h3>
               </div>
-              <span class="muted">统一使用 `/key` 接口发送；默认按 `timeSensitive` 追加参数，`critical` 会自动附带 `call=1`，其余情况按 `call / sound` 追加参数，并固定附带 `badge=1`。</span>
+              <span class="muted">统一使用 `/push` 接口发送，Device Key 只放在请求体中；默认按 `timeSensitive` 追加参数，`critical` 会自动附带 `call=1`，其余情况按 `call / sound` 追加参数，并固定附带 `badge=1`。</span>
             </div>
 
             <div class="settings-grid settings-grid-two">
@@ -107,7 +107,7 @@
               </label>
               <label class="field settings-field">
                 <span>Bark Key</span>
-                <input id="bark-device-key" type="text" />
+                <input id="bark-device-key" type="password" autocomplete="off" />
               </label>
               <label class="field settings-field">
                 <span>标题前缀</span>
@@ -190,7 +190,7 @@
                 <p class="panel-kicker">Test</p>
                 <h3>测试推送内容</h3>
               </div>
-              <span class="muted">测试按钮会直接按当前表单配置发送。Bark 会统一走当前 `/key` 接口，并沿用当前 `sound / call / level / badge=1` 参数规则；Server酱 会把 subtitle 合并进正文。</span>
+              <span class="muted">测试按钮会直接按当前表单配置发送。Bark 会统一走 `/push` 接口，并沿用当前 `sound / call / level / badge=1` 参数规则；Server酱 会把 subtitle 合并进正文。</span>
             </div>
 
             <div class="settings-grid settings-grid-two">
@@ -217,6 +217,6 @@
       </main>
     </div>
 
-    <script src="/static/settings.js?v=20260409a" defer></script>
+    <script src="/static/settings.js?v=20260720a" defer></script>
   </body>
 </html>

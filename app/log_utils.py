@@ -52,6 +52,10 @@ def configure_logging(log_dir: Path) -> None:
     root_logger.setLevel(logging.INFO)
     _ensure_file_handler(root_logger, log_dir / APP_LOG_FILE, formatter)
 
+    # httpx logs complete request URLs at INFO. Keep routine requests out of the
+    # application log so notification endpoints and query parameters stay private.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     content_logger = logging.getLogger(PUSH_CONTENT_LOGGER_NAME)
     content_logger.setLevel(logging.INFO)
     content_logger.propagate = False

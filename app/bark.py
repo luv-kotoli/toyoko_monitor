@@ -93,11 +93,13 @@ class BarkNotifier:
             payload["subtitle"] = subtitle
 
         url, params = self._build_request_target()
+        request_data = {**payload, "device_key": self.config.device_key}
+        logged_request_data = {**request_data, "device_key": "<redacted>"}
         push_content_logger.info(
             "Bark request payload:\n%s",
-            json.dumps({"url": url, "params": params, "data": payload}, ensure_ascii=False, indent=2),
+            json.dumps({"url": url, "params": params, "data": logged_request_data}, ensure_ascii=False, indent=2),
         )
-        response = await self._client.post(url, params=params, data=payload)
+        response = await self._client.post(url, params=params, json=request_data)
         response.raise_for_status()
         response_data = self._parse_response_data(response)
         push_result_logger.info(
@@ -131,7 +133,7 @@ class BarkNotifier:
             if self.config.sound:
                 params["sound"] = self.config.sound
 
-        return f"{self.config.base_url}/{self.config.device_key}", params
+        return f"{self.config.base_url}/push", params
 
     @staticmethod
     def _order_snapshots(snapshots: list[NotificationSnapshot]) -> list[NotificationSnapshot]:
